@@ -1,5 +1,5 @@
 <p align="center">
-  <font size="4"><b>Everything You Ever Wanted to Know About Text Tokenization </b></font>
+  <font size="5"><b>Everything You Ever Wanted to Know About Text Tokenization </b></font>
 </p>
 
 <p align="center">
