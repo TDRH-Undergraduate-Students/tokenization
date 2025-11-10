@@ -1,14 +1,12 @@
-# <b>Everything You Ever Wanted to Know About Text Tokenization </b>
+# *Everything You Ever Wanted to Know About Text Tokenization* (But Were Afraid to Ask)
 
+* **Writers:** Thaís Martins, Thainara Assis, Gustavo Bernardo</font>
 
+* **Reviewer:** João Gabriel Matos, Thaís Martins 
 
-<font size="3">**Writers:** Thaís Martins, Thainara Assis, Gustavo Bernardo</font>
+Welcome to our **Tokenization Research Project**, developed by the **TELUS Digital Research Hub Undergraduate Students**. 
 
-**Reviewer:** João Gabriel Matos
-
-Welcome to the **Tokenization Research Project**, developed by the **TELUS Digital Research Hub Undergraduate Students**. 
-
-This repository shares our research article and supporting materials related to **tokenization techniques**, their **applications**, and **impacts**.</font>
+This repository hosts our comprehensive study on text tokenization methods, covering **word-, character-, and subword-level** algorithms such as BPE, WordPiece, and Unigram, and extends to discussions on **multilingual, mathematical, and code tokenization.** It examines their efficiency, consistency, semantic preservation, and influence on large language models.
 
 ## ***Summary***
 1. Introduction
