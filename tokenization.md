@@ -46,6 +46,7 @@ This section installs and configures all the dependencies required to run the no
 ### Utilities
 
 ``` python
+# Import required libraries
 from typing import List
 import string
 import io, re, unicodedata
@@ -66,7 +67,7 @@ def safe_len(fn, text):
     except Exception:
         return None
 
-#Compute the number of tokens produced by multiple tokenizers for each sentence.
+#Function to compute the number of tokens produced by multiple tokenizers for each sentence.
 def compute_token_counts(
     tokenizers: Dict[str, Callable[[str], List[str]]],
     sentences: Dict[str, str]
@@ -78,7 +79,7 @@ def compute_token_counts(
             counts[name].append(n if n is not None else np.nan)
     return counts
 
-#Plot a grouped bar chart comparing token counts across tokenizers and sentences.
+#Function to plot a grouped bar chart comparing token counts across tokenizers and sentences.
 def plot_token_counts(
     counts: Dict[str, List[int]],
     labels: Iterable[str],
@@ -235,5 +236,341 @@ for s in CASES:
     ----------------------------------------------------------------------------------------------------
 
   \\
-  # 
-  # 3. Character-Level Tokenization: Breaking it all the way down
+# 
+# 3. Character-Level Tokenization: Breaking it all the way down
+The underlying logic of this type of tokenizer is straightforward: while a language may contain thousands of words, it is composed of a limited set of characters.
+
+For instance, although there are approximately 170,000 distinct words in English, according to the Oxford English Dictionary [7], any text in this language can be represented with just a little over one hundred characters (not only the 26 letters, but also digits, whitespace, punctuation, and common symbols) [8].
+
+To process texts in languages that use accent marks, different alphabets, emojis, or mathematical symbols, more than a hundred characters are needed. That is why Character-Level Tokenization relies on Unicode. Unicode is a standardized system that assigns a unique code point to every character across the world's writing systems, as well as symbols, punctuation marks, and emojis [9].
+
+This tokenization maps each code point to a single token, meaning that the total number of tokens in the sequence corresponds exactly to the number of characters in the input, as illustrated in Example 2.
+
+### Example 2 - Character-Level: One Token per Unicode Code Point
+
+> ***Caption.** Each character (Unicode code point) becomes a token, guaranteeing coverage but producing longer sequences.*
+
+
+``` python
+samples = ["house", "language", "internationalization"]
+
+for sample in samples:
+    chars = list(sample)
+    print(f"Word: {sample}")
+    print("Characters:", chars, "| length:", len(chars))
+    print("-" * 130)
+```
+
+    Word: house
+    Characters: ['h', 'o', 'u', 's', 'e'] | length: 5
+    ----------------------------------------------------------------------------------------------------------------------------------
+    Word: language
+    Characters: ['l', 'a', 'n', 'g', 'u', 'a', 'g', 'e'] | length: 8
+    ----------------------------------------------------------------------------------------------------------------------------------
+    Word: internationalization
+    Characters: ['i', 'n', 't', 'e', 'r', 'n', 'a', 't', 'i', 'o', 'n', 'a', 'l', 'i', 'z', 'a', 't', 'i', 'o', 'n'] | length: 20
+    ----------------------------------------------------------------------------------------------------------------------------------
+
+The trade-off of this approach is that, while it keeps the dictionary relatively small compared to other tokenization methods -- which can exceed 800,000 tokens -- it generates much longer token sequences, as illustrated in Example 3. This leads to an efficiency issue, since it forces the model to use significantly more layers and parameters to capture dependencies across characters. As a result, the LLMs training becomes slower, more memory-intensive, and computationally expensive [10].
+
+### Example 3 - Sequence Length Growth at Character Level 
+> ***Caption.** This example compares character counts for short, medium, and long samples. In short sentences, using character-level tokenization might not seem so disadvantageous, but as sentence length increases, its token sequences become extremely bigger than the sequences of word-level and subword-level tokenization- which is going to be discussed next.*
+
+``` python
+# Models used as examples
+tokenizers = {
+    "Word-Level (SpaCy)": lambda s: [token.text for token in nlp(s)],
+    "Subword-Level (WordPiece - BERT)": lambda s: tok_wp.tokenize(s),
+    "Character-Level": lambda s: list(s)
+}
+
+# Sentences used as examples
+sentences = {
+  "Small": "Artificial intelligence is transforming the way we use language.",
+  "Medium": "Natural Language Processing, also known as NLP, is an interdisciplinary field that combines techniques from linguistics, statistics, and machine learning to enable computers to understand, interpret, and generate text in a way that increasingly resembles human language.",
+  "Large": "Over the past decades, advances in language models have revolutionized the field of artificial intelligence. Models based on deep architectures, such as BERT, RoBERTa, and T5, have enabled remarkable achievements in tasks such as machine translation, sentiment analysis, question answering, text summarization, and even creative language generation. These models have become fundamental tools for research, business, and education, paving the way for innovative applications in virtually every area that depends on human communication. However, ethical and social challenges also arise, such as bias in models, the privacy of data used in training, and accountability for the use of these technologies, which must be carefully considered in the future of NLP."
+}
+```
+``` python
+results = {tok_name: [] for tok_name in tokenizers.keys()}
+for size, sentence in sentences.items():
+    for name, fn in tokenizers.items():
+        n = fn(sentence)
+        if n is not None:
+            results[name].append(n)
+
+counts = compute_token_counts(tokenizers, sentences)
+plot_token_counts(counts, sentences.keys(), title="Comparing Tokenization Levels")
+```
+
+<p align="center">
+<img src="figures/graph1.png" alt="Bar chart comparing tokenization levels across sentence sizes. The x-axis shows sentence size categories (Small, Medium, Large), and the y-axis represents the number of tokens. Three tokenization methods are compared: Word-Level (SpaCy) in blue, Subword-Level (WordPiece – BERT) in orange, and Character-Level in green. For all sentence sizes, Character-Level produces significantly more tokens, especially in large sentences, while Word- and Subword-Level tokenizations yield fewer and similar numbers of tokens." width="450">
+</p>
+
+One of the main advantages of this method is its ***coverage***. Since the vocabulary is defined at the character level, there are no unknown words (Out of Vocabulary - OOVs). Any new word can always be represented as a combination of characters already present in the model's vocabulary.
+
+An additional important aspect is that ***meaning conservation*** of character-level tokenization varies across languages. In languages based on the Latin alphabet, such as Portuguese or English, splitting the text into individual characters can lead to a loss of meaning, since a single character carries little to no semantic information on its own. In contrast, in languages such as Chinese or Japanese, each character inherently carries semantic meaning, as we can see in Example 4. In these cases, character-level tokenization tends to be more natural and effective [11].
+
+### Example 4 - Alphabetic vs Logographic Scripts
+
+> ***Caption.** Contrast an English alphabetic word with a Chinese logographic word to highlight differences in meaning preservation at character level.*
+> 
+> -   **English: "house"** → character-level tokens: [h, o, u, s, e]
+>     Here, each individual character has no semantic meaning on its own; the concept of "house" only emerges from their combination.
+> -   **Chinese: "家"** (jiā - house) → character-level tokens: [家]
+>     In this case, the character itself already represents the concept of "house/home," preserving semantic meaning at the character level.
+
+``` python
+eng = "house"
+zh  = "家"  # 'home/house'
+print("English characters:", list(eng))
+print("Chinese character:", list(zh))
+```
+
+    English characters: ['h', 'o', 'u', 's', 'e']
+    Chinese character: ['家']
+
+Another alternative is to tokenize by converting every character into bytes using UTF-8 encoding, a method known as **Byte-Level Tokenization**. UTF-8 (Unicode Transformation Format -- 8 bit) is the dominant standard for representing text digitally; it encodes each Unicode character as one to four bytes, allowing all writing systems and symbols to be represented in a compact, backward-compatible form [12]. This approach further reduces the dictionary size, since it only needs to store the 256 possible byte values (plus a few special tokens), rather than maintaining an entry for every possible character or symbol, as illustrated in Example 5.
+
+### Example 5 - Byte-Level UTF‑8: Accents Become Multiple Bytes 
+
+> ***Caption.** In this example of usage of byte-level tokenization, the character \"é\" is divided into its bytes (C3 + A9). With this approach, the vocabulary will be smaller, since it won\'t be necessary to create more entries for each character with accentuation, and the model will only use the byte combination of the letter and the accent.*
+
+
+``` python
+# Function to converting the characters to bytes
+def to_hex_bytes(s: str):
+    return " ".join([f"{b:02X}" for b in s.encode('utf-8')])
+
+for w in ["cafe", "café", "fiancée", "coração"]:
+    print(f"{w:10s} -> {to_hex_bytes(w)}")
+```
+
+    cafe       -> 63 61 66 65
+    café       -> 63 61 66 C3 A9
+    fiancée    -> 66 69 61 6E 63 C3 A9 65
+    coração    -> 63 6F 72 61 C3 A7 C3 A3 6F
+
+Even so, the Byte-Level tokenization still carries the ***efficiency*** and ***meaning conservation*** problems of the Character-Level, which make their use far from ideal. If splitting text into whole words does not work, and splitting into individual characters also fails, the answer may lie in an intermediate approach we will explore next: **subword tokenization**.
+
+#
+# 4. Subword-Level Tokenization: The sweet spot of modern NLP 
+
+Subword-level tokenization has become the standard for most state-of-the-art language models. A **subword** is a unit of text that is larger than a single character but smaller than a full word, for example, "grass" and "hopper" in grasshopper.
+
+It strikes a balance: word-level methods risk an unmanageably large vocabulary, while character-level approaches are overly granular and slow to train. On top of that, subword tokenization does a much better job at ***preserving meaning***, since many of the chunks it produces correspond to morphemes or recognizable parts of words, helping models keep track of both structure and sense.
+
+These methods are **data-driven**, meaning that the segmentation rules are not predefined but instead learned from large corpora based on statistical patterns of character co-occurrence. To better understand the strengths and weaknesses of word-, character-, and subword-level tokenization, we can contrast these three approaches side by side in table 1:
+
+**Table 1 - Comparison of Tokenization Levels** 
+| **Metric** | **Word** | **Character** | **Subword** |
+|--------|--------|--------|---------|
+| **Coverage** | **Language-Dependent** - Works well for languages with clear word boundaries; fails for those without spaces. | **Excellent** - No OOV words; any word can be formed from known characters. | **Excellent** - Builds words from a mix of characters and frequent subwords. |
+| **Efficiency** | **Low** - Large vocabulary sizes. | **Very Low** - Long token sequences; deeper networks and more training needed. | **High** - Balanced vocab size and sequence length. |
+| **Consistency** | **Low** - Same word may be segmented differently with punctuation. | **Excellent** - Every character treated uniformly. | **High** - Reduces redundancy across similar words. |
+| **Meaning Preservation** | **Moderate** - Breaks semantic units, missing relationships in compounds. | **Language-Dependent** - Poor for alphabetic but good for logographic languages (e.g., Chinese). | **High** - Some subwords align with morphemes (smallest meaning units). |
+
+
+>***Caption.** This table contrasts word-, character-, and subword-level tokenization according to four key metrics: coverage, efficiency, consistency, and meaning preservation. It highlights how subword tokenization offers a balanced compromise between the vocabulary size and sequence length of word- and character-level approaches.*
+>
+>***Source.** Authors*
+
+Although subword tokenization methods outperform word- and character-level approaches, they still present limitations. These methods may introduce inconsistencies and occasionally break apart meaningful semantic units. The next sections provide a closer examination of the three most widely used subword algorithms – **Byte Pair Encoding (BPE), WordPiece, and Unigram** – which differ in how tokens are selected and vocabularies are constructed.
+
+##
+## 4.1. Byte Pair Encoding (BPE)
+
+This is the most widely used tokenization algorithm [13], adopted in models such as the GPT family (for instance, the Tiktoken tokenizer). The intuition of this tokenization type is simple: BPE builds a vocabulary by iteratively looking for most frequent adjacent symbol pairs and then merging them to store as a new token [2]. 
+
+The process works as follows:
+
+1.  **Initialization:** the algorithm starts with an initial vocabulary that includes all the basic characters and special symbols found in the training data.
+
+2.  **Pair counting:** it scans the corpus and counts all adjacent pairs of symbols.
+
+3.  **Merging:** the most frequent pair of adjacent units is combined into a new token and added to the dictionary.
+
+4.  **Iteration:** steps 2 and 3 are repeated until the target vocabulary size is reached.
+
+This iterative merging produces a dictionary that adapts naturally to the data: frequent words as "people\", are eventually represented as single tokens, while rare words are split into smaller units, as is shown in Example 6 [14, 15].
+
+At the moment of using, also called inference time, the tokenizer applies the learned merge rules greedily – from longest valid merge to shortest – so each span in the input is replaced by the largest token present in the vocabulary. Unseen or rare words naturally back off to smaller subwords and, if necessary, to the base characters. This behavior yields broad ***coverage*** with relatively compact sequences for frequent forms, improving both ***efficiency*** and ***consistency*** of segmentation across similar words.
+
+Implementations differ in how they encode boundaries. In GPT-style BPE vocabularies, a leading "Ġ" on a token denotes that it is preceded by a space (e.g., "Ġlove"), allowing the model to learn word boundaries without a separate pre-tokenizer. This convention appears in the outputs of Example 6 and explains why otherwise identical strings may occur with and without the marker.
+
+A widely used variant, **byte-level BPE** (e.g., GPT-2 and successors), runs BPE over UTF-8 bytes instead of Unicode code points. This guarantees language-agnostic coverage, keeps preprocessing reversible and simple, and reduces the base alphabet to 256 values. The trade-off is that some words split into slightly more pieces and space/byte markers become visible in the vocabulary – harmless in practice, but occasionally surprising to readers unfamiliar with the convention.
+
+### Example 6 - Subword BPE: Merge Frequent Pairs
+
+> ***Caption.** In this example, the output of the GPT-2 tokenizer is shown for two different sentences:*
+>
+>-   \"The old man wrote a short note to his friend.\" (only common   words)
+>-   \"The **fey** creature spoke with **floccinaucinihilipilification** of human worries\" (some rare word)
+>
+> *The words from the first sentence are treated as unique tokens, since they are more common. However, both of the rare words from the second sentence (the short and the long one) are divided into more than one token, because their sequences of characteres are uncommon. The character \"Ġ\" in some tokens is a marker that indicates a whitespace before the token.*
+>
+> *You can see the full implementation of Byte-Pair Encoding tokenization, step by step, in the [Hugging Face article](https://huggingface.co/learn/llm-course/chapter6/5) and [codes](https://colab.research.google.com/github/huggingface/notebooks/blob/master/course/en/chapter6/section5.ipynb).*
+
+``` python
+# Texts used as examples
+texts = ["The old man wrote a short note to his friend.","The fey creature spoke with floccinaucinihilipilification of human worries"]
+
+# Print the tokens
+subword_tokenizer(texts, tok_bpe)
+```
+
+    Text: The old man wrote a short note to his friend.
+    Tokens and their vocabulary indices:
+
+| **#** | **Token** | **Token ID** |
+|-------|------------|--------------|
+| 0 | The | 464 |
+| 1 | Ġold | 1468 |
+| 2 | Ġman | 582 |
+| 3 | Ġwrote | 2630 |
+| 4 | Ġa | 257 |
+| 5 | Ġshort | 1790 |
+| 6 | Ġnote | 3465 |
+| 7 | Ġto | 284 |
+| 8 | Ġhis | 465 |
+| 9 | Ġfriend | 1545 |
+| 10 | . | 13 |
+
+    Text: The fey creature spoke with floccinaucinihilipilification of human worries
+    Tokens and their vocabulary indices:
+
+| **#** | **Token** | **Token ID** |
+|-------|------------|--------------|
+| 0 | The | 464 |
+| 1 | Ġfe | 730 |
+| 2 | y | 88 |
+| 3 | Ġcreature | 7185 |
+| 4 | Ġspoke | 5158 |
+| 5 | Ġwith | 351 |
+| 6 | Ġfl | 781 |
+| 7 | occ | 13966 |
+| 8 | in | 259 |
+| 9 | auc | 14272 |
+| 10 | in | 259 |
+| 11 | ihil | 20898 |
+| 12 | ip | 541 |
+| 13 | il | 346 |
+| 14 | ification | 2649 |
+| 15 | Ġof | 286 |
+| 16 | Ġhuman | 1692 |
+| 17 | Ġworries | 18572 |
+
+
+##
+## 4.2. WordPiece
+
+The WordPiece model is the basis for the tokenizers used in famous Transformer models, such as **BERT, DistilBERT, and Electra** [2], and it originated in work on Japanese and Korean voice search [16]. The operation of WordPiece can be summarized in the following steps:
+
+1.  **Initialization:** start from a vocabulary with basic characters and special symbols.
+
+2.  **Pair Scoring:** scan the corpus and compute, for every adjacent pair (A, B), a likelihood score, using the following formula:
+
+$$
+   Score(A, B) = \frac{freq(AB)}{freq(A) \cdot freq(B)}
+$$
+
+3.  **Merging:** merge the highest-scoring pair and add the new token to the dictionary.
+4.  **Iteration:** repeat scoring and merging until the dictionary reaches a preset size [17].
+
+The objective here is to prioritize merging pairs of tokens that appear together much more frequently than they would by chance. Then, the main difference between WordPiece and BPE (Byte-Pair Encoding), is precisely the use of this probability-based formula, instead of just using raw frequency counts to decide which pairs to merge.
+
+In statistics, likelihood quantifies how probable the observed data are under a specified model with given parameter values; it is a function of the parameters given the data, not a probability of the parameters themselves, and maximizing it is the core idea behind maximum likelihood estimation [18].
+
+In the context of WordPiece, the "model and parameters" correspond to a candidate subword vocabulary (and the segmentations it enables). At each iteration, WordPiece asks whether merging an adjacent pair **A B** would increase the corpus likelihood under this tokenization model. In practice, this is approximated by a score that favors pairs whose joint frequency is larger than expected from their individual frequencies.
+
+It's also worth pointing out that in this scoring, **order matters:** the score for "AB" will generally differ from the score for "BA," just as "me" has a different chance of appearing in text compared with "em."
+
+This likelihood-driven construction yields a dictionary that adapts naturally to the data: common multi-character sequences (e.g., stems and affixes) tend to become single tokens, while rare or idiosyncratic words break off to smaller pieces – as illustrated in Example 7.
+
+At inference time, WordPiece segments each word into the most probable sequence of subwords under the learned vocabulary; implementations in the BERT family typically mark non-initial subwords with a continuation prefix (e.g., "##ing"), while relying on a word pre-tokenizer to handle spaces and punctuation, which preserves consistency across contexts.
+
+### Example 7 - WordPiece: Likelihood‑Driven Merges 
+
+> **Caption.** In this example, the output of the BERT tokenizers shown for the same two sentences of last example:
+>-   \"The old man wrote a short note to his friend.\" (only common words)
+>-   \"The **fey** creature spoke with **floccinaucinihilipilification** of human worries\" (some rare word)
+> Here, the relation between rarity of words and their number of tokens can be seen. The \"##\" that appears in some tokens marks that the token began in the middle of a word that was segmented.
+> You can see the full implementation of WordPiece tokenization, step by step, in the [Hugging Face article](https://huggingface.co/learn/llm-course/chapter6/6) and [codes](https://colab.research.google.com/github/huggingface/notebooks/blob/master/course/en/chapter6/section6.ipynb).
+
+``` python
+# Texts used as examples
+texts = ["The old man wrote a short note to his friend.","The fey creature spoke with floccinaucinihilipilification of human worries"]
+
+# Prints the tokens
+subword_tokenizer(texts, tok_wp)
+```
+
+    Text: The old man wrote a short note to his friend.
+    Tokens and their vocabulary indices:
+
+| **#** | **Token** | **Token ID** |
+|-------|------------|--------------|
+| 0 | the | 1996 |
+| 1 | old | 2214 |
+| 2 | man | 2158 |
+| 3 | wrote | 2626 |
+| 4 | a | 1037 |
+| 5 | short | 2460 |
+| 6 | note | 3602 |
+| 7 | to | 2000 |
+| 8 | his | 2010 |
+| 9 | friend | 2767 |
+| 10 | . | 1012 |
+
+    Text: The fey creature spoke with floccinaucinihilipilification of human worries
+    Tokens and their vocabulary indices:
+    
+| **#** | **Token** | **Token ID** |
+|-------|------------|--------------|
+| 0 | the | 1996 |
+| 1 | fey | 23864 |
+| 2 | creature | 6492 |
+| 3 | spoke | 3764 |
+| 4 | with | 2007 |
+| 5 | fl | 13109 |
+| 6 | ##oc | 10085 |
+| 7 | ##cina | 28748 |
+| 8 | ##uc | 14194 |
+| 9 | ##ini | 5498 |
+| 10 | ##hil | 19466 |
+| 11 | ##ip | 11514 |
+| 12 | ##ili | 18622 |
+| 13 | ##fication | 10803 |
+| 14 | of | 1997 |
+| 15 | human | 2529 |
+| 16 | worries | 15508 |
+
+
+##
+## 4.3. Unigram 
+
+The Unigram algorithm is a subword-based tokenization method that, unlike purely heuristic approaches such as BPE, the dictionary constructed in this method is derived on probabilistic grounds, where each subword is assumed to be independent of the others. The primary objective of the algorithm of building the dictionary is to **identify a set of subwords that minimizes the overall loss function** [19] and it works as follow:
+
+1.  **Initialization:** start from a large candidate vocabulary $V_0$ that includes all basic characters and plausible subwords.
+
+2.  **Probability Estimation:** estimate $P(t)$ for each token $t \in V$.
+    
+$$
+   P(t) = \frac{\text{number of times } t \text{ appears in the tokenizations}}{\text{total number of tokens in the tokenizations}}
+$$
+
+4.  **Segmentation:** For every word, compute all possible segmentations using $V$, and select the one with the most probable segmentation under the model, typically
+
+$$
+   P(\mathbf{w}) = P(t_1) \cdot P(t_2) \cdot \ldots \cdot P(t_n)
+$$
+
+4.  **Loss Computation:** Compute the negative log-likelihood (NLL) of the corpus. For each token, estimate the increase in NLL if ( t ) is removed.
+
+$$
+   𝓛 = -\sum_{w \in \text{corpus}} \text{freq}(w) \cdot \log(P(w))
+$$
+
+5.  **Pruning:** Remove the bottom ( p% ) of tokens (those whose removal least harms likelihood), while preserving basic characters.
+
+6.  **Iteration:** Re-estimate probabilities with the pruned dictionary. Repeat steps 3 - 7 until the dictionary reaches the target size.
