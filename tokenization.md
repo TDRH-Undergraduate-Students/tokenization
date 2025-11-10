@@ -491,11 +491,11 @@ At inference time, WordPiece segments each word into the most probable sequence 
 
 ### Example 7 - WordPiece: Likelihood‑Driven Merges 
 
-> **Caption.** In this example, the output of the BERT tokenizers shown for the same two sentences of last example:
+> ***Caption.** In this example, the output of the BERT tokenizers shown for the same two sentences of last example:*
 >-   \"The old man wrote a short note to his friend.\" (only common words)
 >-   \"The **fey** creature spoke with **floccinaucinihilipilification** of human worries\" (some rare word)
-> Here, the relation between rarity of words and their number of tokens can be seen. The \"##\" that appears in some tokens marks that the token began in the middle of a word that was segmented.
-> You can see the full implementation of WordPiece tokenization, step by step, in the [Hugging Face article](https://huggingface.co/learn/llm-course/chapter6/6) and [codes](https://colab.research.google.com/github/huggingface/notebooks/blob/master/course/en/chapter6/section6.ipynb).
+> *Here, the relation between rarity of words and their number of tokens can be seen. The \"##\" that appears in some tokens marks that the token began in the middle of a word that was segmented.*
+> *You can see the full implementation of WordPiece tokenization, step by step, in the [Hugging Face article](https://huggingface.co/learn/llm-course/chapter6/6) and [codes](https://colab.research.google.com/github/huggingface/notebooks/blob/master/course/en/chapter6/section6.ipynb).*
 
 ``` python
 # Texts used as examples
@@ -574,3 +574,520 @@ $$
 5.  **Pruning:** Remove the bottom ( p% ) of tokens (those whose removal least harms likelihood), while preserving basic characters.
 
 6.  **Iteration:** Re-estimate probabilities with the pruned dictionary. Repeat steps 3 - 7 until the dictionary reaches the target size.
+
+In contrast to methods such as BPE and WordPiece, which begin with a minimal dictionary and iteratively expand it, the Unigram model adopts an inverse strategy: it starts from a large dictionary and progressively reduces it until reaching a pre-defined size. The initial dictionary can be obtained through various approaches, such as applying a preliminary segmentation algorithm or extracting the most frequent sequences from the corpus to generate a comprehensive set of candidate tokens [20]. The last approach is called SentencePiece and it is better discussed in section 6.
+
+The reduction process is iterative and guided by a loss metric that evaluates the performance of the current dictionary on the corpus. For each token, the algorithm estimates the potential impact of its removal on the loss. Tokens whose exclusion leads to only a marginal increase in the loss are considered less relevant and thus candidates for elimination. To ensure computational efficiency, the removal process is not conducted on a token-by-token basis. Instead, in each iteration, a fraction of the least relevant tokens - typically ranging from 10% to 20% - is simultaneously removed.
+
+This procedure is repeated until the dictionary converges to the target predefined size. A critical constraint of the method is the preservation of basic characters (e.g., individual letters), thereby guaranteeing the coverage of it, letting any word be reconstructed from the remaining dictionary. As the other two subword techniques, Unigram also has great performance in consistency, efficiency and meaning preservation.
+
+The essence of the Unigram algorithm lies in the interplay between loss evaluation and token elimination, which is intrinsically linked to the way the model itself segments the text. This probabilistic and iterative refinement process enables the construction of vocabularies that achieve broad coverage while maintaining efficiency in both storage and computation.The algorithm in action can be seen in Example 8.
+
+### Example 8 - Unigram (SentencePiece): Prune by Likelihood 
+
+> ***Caption.** This example shows the output of the T5 tokenizer for the same two different sentences. The same behavior from the previous ones can be observed.*
+> *Note that many tokens start with the character "▁", which is an encoding of whitespaces produced by previous segmentation. Then, this special mark means that the token is preceded by a whitespace. For consistency, by default every first token of the input has a "▁" inserted.*
+> *You can see the full implementation of Unigram tokenization, step by step, in the [Hugging Face article](https://huggingface.co/learn/llm-course/chapter6/7) and [codes](https://colab.research.google.com/github/huggingface/notebooks/blob/master/course/en/chapter6/section7.ipynb).*
+
+
+``` python
+# Texts used as examples
+texts = ["The old man wrote a short note to his friend.","The fey creature spoke with floccinaucinihilipilification of human worries"]
+
+# Prints the tokens
+subword_tokenizer(texts, tok_uni)
+```
+
+    Text: The old man wrote a short note to his friend.
+    Tokens and their vocabulary indices:
+
+| **#** | **Token** | **Token ID** |
+|-------|------------|--------------|
+| 0 | __The | 486 |
+| 1 | __old | 6801 |
+| 2 | __man | 674 |
+| 3 | __wrote | 17564 |
+| 4 | __ | 259 |
+| 5 | a | 262 |
+| 6 | __short | 5700 |
+| 7 | __note | 16932 |
+| 8 | __to | 288 |
+| 9 | __his | 1638 |
+| 10 | __friend | 22163 |
+| 11 | . | 260 |
+
+    Text: The fey creature spoke with floccinaucinihilipilification of human worries
+    Tokens and their vocabulary indices:
+    
+| **#** | **Token** | **Token ID** |
+|-------|------------|--------------|
+| 0 | __The | 486 |
+| 1 | __ | 259 |
+| 2 | fey | 158732 |
+| 3 | __c | 317 |
+| 4 | reature | 180344 |
+| 5 | __ | 259 |
+| 6 | spoke | 62434 |
+| 7 | __with | 514 |
+| 8 | __flo | 50594 |
+| 9 | __c | 297 |
+| 10 | cina | 19037 |
+| 11 | uci | 46981 |
+| 12 | nihil | 72735 |
+| 13 | i | 266 |
+| 14 | pil | 10287 |
+| 15 | ification | 18870 |
+| 16 | __of | 304 |
+| 17 | __human | 6910 |
+| 18 | __wor | 51234 |
+| 19 | ries | 6033 |
+
+#
+# 5. Why Models Struggle With Letters and Spelling 
+
+The same strengths that make subword tokenization so effective for meaning conservation come with an important trade-off: models don't truly operate at the level of individual characters. 
+
+Subword tokenization is like building a wall with pre-made bricks – each brick represents a token, optimized for meaning and efficiency. The model is excellent at stacking these bricks to form coherent sentences, but it can't look inside a brick to see the individual letters. In other words, LLMs learn and manipulate semantic chunks, yet the fine-grained character-level details remain hidden. 
+
+A well-known internet example illustrates this limitation: when asked how many times the letter r appears in the word strawberry, language models often fail to give the correct answer (see Figure 2).
+
+### ***Figure 2: ChatGPT 4o Counting r\'s in \"strawberry"***
+<p align="center">
+  <img src="figures/fig2.png" 
+       alt="Figure 2: ChatGPT interface showing a user asking “How many r’s in strawberry?” and the model responding that there are two “r”s in the word “strawberry.”" 
+       width="450">
+</p>
+
+>***Source:** GPT 4o*
+
+This happens because originally the models are not explicitly trained to perform systematic counting, but also because words are tokenized into larger pieces rather than individual letters, so it is more difficult for the model to naturally understand this technique.
+
+Recent versions and updates of GPT and other language models address this weakness through fine-tuning (a later phase of LLM training) with step-by-step demonstrations, as in Figure 3. In tasks such as spelling or letter counting, the model can then "reason out loud" by making each letter explicit, which greatly improves its chances of arriving at the right answer.
+
+### ***Figure 3: ChatGPT 4o chain-of-though to count letters***
+
+<p align="center">
+  <img src="figures/fig3.png" 
+       alt="Figure 3: ChatGPT interface showing a user asking “How many e’s in blueberries?” Initially, the model answers that there are two e’s, lists the letters of the word, and then corrects itself, acknowledging there are three e’s in total. The conversation demonstrates a self-correction in reasoning." 
+       width="550">
+</p>
+
+> ***Source:** GPT 4o*
+
+Although it\'s being solved, this is a clear example of how the tokenization algorithm can constrain an LLM, turning tasks that are simple for humans into challenging ones for the model.
+
+#
+# 6. Tokenization of Different Languages
+
+Language model technology was initially developed with English as the primary focus, making it heavily optimized for this language but less suitable for others, especially those with different alphabets and writing systems.
+
+For instance, the BERT model (which incorporates WordPiece tokenization) is said to have a multilingual vocabulary, but more than 70% of it is composed of latin tokens, making its performance drastically decay in morphologically rich languages, as Georgian and Bengali, or low resources languages, as Burmese [21].
+
+One way to evaluate a tokenizer's performance is by analyzing the average number of subwords a word is split into, what is called fertility. Ideally, most words would be represented by a single token, which means an average fertility close to 1. 
+
+Figure 4, however, reveals a significant challenge for certain languages. While most words in English (en) are preserved, other languages, as Burmese (my), show a long tail in the distribution, indicating that many of its words are fragmented into a large number of subwords, suggesting poor tokenization efficiency for this language.
+
+### ***Figure 4: Distribution of the number of subwords per word across different languages***
+
+<p align="center">
+  <img src="figures/fig4.png" 
+       alt="Line chart showing the distribution of the percentage of total words by number of subwords across six languages: English (en), Russian (ru), Arabic (ar), Bengali (bn), Georgian (ka), and Burmese (my). The x-axis represents the number of subwords per word (from 1 to ≥10), and the y-axis shows the percentage of total words. English and Russian lines peak sharply at one subword, indicating most words remain whole, while Burmese and Georgian show higher fragmentation across multiple subwords." 
+       width="450">
+</p>
+
+> ***Caption:*** This chart illustrates the tokenizer\'s varying efficiency across six languages: English (en), Russian (ru), Arabic (ar), Bengali (bn), Georgian (ka), and Burmese (my). A clear contrast is visible between languages where most words remain whole (en, ru) and those that are frequently fragmented (especially my, ka), which can impact model performance.
+>
+>***Source:** WANG, 2021 [22]*
+
+It is important to clarify that, although compression (i.e., producing fewer tokens) is a valuable metric, the quality of tokenization also depends on how segments align with morphological structures and the choices made during pre-tokenization [23].
+
+Recent multilingual evaluations show that tokenization inefficiency systematically disadvantages low-resource, morphologically complex languages, with accuracy dropping as fertility rises; conversely, better alignment between tokens and language units reduces this effect [24]. This highlights the need to improve tokenization strategies for languages other than English, particularly those that are morphologically rich or low-resource, in order to mitigate structural disadvantages and ensure more equitable model performance across languages.
+
+##
+## 6.1. Pre-tokenization and SentencePiece
+
+Most traditional subword methods (BPE, Unigram and WordPiece) require a pre-segmentation of the text into words before building their vocabulary. For instance, in English and most Latin languages, the spaCy tokenizer [6] reliably handles word boundaries and normalizes edge cases (punctuation, contractions, emails/URLs) discussed in Section 2.
+
+But, as discussed in this same section, some languages don\'t mark word boundaries with whitespace, or even, some of them exhibit very rich morphology/context-sensitive rules, so language-specific pre-tokenizers – such as Jieba for Chinese [25], Kuromoji for Japanese [26] and Farasa Segmenter for Arabic [27] – are necessary for proper text segmentation.
+
+These tokenizers incorporate the specific linguistic features of a language. For instance, by handling Arabic\'s inflectional morphology and cursive script [28]. Similarly, for Indic scripts, a practical choice is Orthographic-syllable Tokenization, which groups the characters that are written together as a single block (e.g., consonant + vowel sign) into one token [29]. These approaches reduce over-segmentation and produces more stable, meaningful pieces [28,29].
+
+However, relying on a collection of separate pre-tokenizers quickly becomes problematic in multilingual settings: each tool introduces its own conventions and errors, which can lead to inconsistencies in the tokens that the model sees. Moreover, integrating multiple pre-tokenizers into a single pipeline increases both system complexity and maintenance costs, making it harder to scale across dozens of languages.
+
+To overcome the limitations of language-specific pre-tokenizers, tools like **SentencePiece** have been developed. Introduced in 2018 by Kudo and Richardson [30], SentencePiece is a subword tokenizer that works directly on raw text, without requiring an initial word segmentation.
+
+It treats the sentences just as sequences of Unicode characters, whose last version supports over 150,000 characters, encompassing not only a wide range of alphabets (even including some of Native American languages) but also musical, mathematical, and Braille symbols. This gives the model all the flexibility needed to handle multilingual texts [9].
+
+After this conversion of characters into code points (just as in Character Level - Section 3) the model applies a subword algorithm, be it BPE or Unigram, to construct its vocabulary. In short, SentencePiece can be seen as a hybrid between character-level and subword-level tokenization, as it handles every Unicode character while also building frequent subword units [30].
+
+This structure makes SentencePiece inherently **language-agnostic**, meaning the algorithm does not rely on any language-specific rules or linguistic knowledge for operating. Although the advantages of language-agnosticism and other features of SentencePiece are explained in the article of Kudo and Richardson, the algorithm is not the answer to any situation [30].
+
+##
+## 6.2. Generality X Accuracy
+
+While SentencePiece brings clear engineering benefits – single pipeline, no reliance on language-specific rules, and robust coverage over raw Unicode – it is not universally optimal when accuracy is the primary objective.
+
+A consistent pattern in the literature is that linguistically informed tokenizers can outperform purely statistical, language-agnostic ones in low-resource and morphologically rich scenarios.
+
+For agglutinative languages such as Turkish, Linguistically Motivated Vocabulary Reduction (LMVR) improves translation quality over BPE by respecting morpheme boundaries and reducing harmful splits. For Indic scripts, Orthographic-Syllable tokenization groups the written "blocks" (akshara-like units) and beats word/character/morpheme baselines when parallel data are scarce – precisely because the token units better match the writing system. Similar advantages for morphology-aware or script-aware schemes have been reported in other rich-morphology families and polysynthetic languages [31].
+
+By contrast, in high-resource, monolingual settings the gains from specialized tokenizers tend to shrink. When abundant data are available, monolingual models (with vocabularies tuned to the target language) typically match or surpass multilingual counterparts, and differences between subword algorithms matter less provided average granularity stays low (≈ 1 - 1.5 subwords per word). Even then, recent analyses caution that performance hinges on the overall design – pre-tokenization, vocabulary construction, and inference strategy – not merely on compressing sequences [32]. 
+
+In conclusion, SentencePiece remains a strong default for scale and portability, especially in multilingual pipelines, but when accuracy in a specific language is the dominant goal (e.g., rich morphology, non-whitespace scripts, or data-limited regimes), language-specific tokenizers that align tokens with morphemes or orthographic units have a documented edge. Choosing between them is therefore a question of operational generality versus linguistic fidelity: the more the task and language demand faithful segmentation, the more worthwhile it becomes to trade some generality for a tokenizer tailored to that language.
+#
+# 7. Tokenization of Mathematics
+
+An important first point to understand is that LLMs do not know math. When asked to perform calculations, such as "What is 1+1?", they just predict the most likely next token, but they are not endowed with mathematical reasoning. When they make mistakes, it is not as straightforward as with humans: even when people get an answer wrong, there is still logic behind it, but for LLMs, the only principle guiding their answer is what is the most common continuation of "1+1" in their training data.
+
+This limitation raises a couple of questions about potentially more efficient ways for LLMs to interpret complex mathematical equations and produce more accurate answers.
+
+##
+## 7.1. Direction of Tokenization
+
+Nowadays, models use different strategies for tokenizing numbers. For instance, PaLM, LLaMa, and Mistral adopt single-digit tokenization as GPT-3.5 and GPT-4\'s have specific tokens for each number of 1 to 3 digits [13]. Alongside this choice, the direction in which tokenization happens, which concerns which number will be tokenized first, also has a great impact on a model\'s performance in arithmetic tasks.
+
+The standard way of doing it is called **left-to-right (L2R)**, which reflects the writing direction of English and Romance languages. However, there is also the **right-to-left (R2L)** form of tokenization, which more closely mirrors the way humans perform arithmetics in the Indo-Arabic numeral system. The difference of both directions of tokenizations is exemplified in Figure 5 and Example 9.
+
+### ***Figure 5: Tokenization from left-to-right (L2R) and right-to-left (R2L):***
+
+<p align="center">
+  <img src="figures/fig5.png" 
+       alt="The image shows two addition examples. On the left, labeled “L2R Tokenization,” the numbers 8302080 and 3529456 are added to make 11831536. The blue digits (2080 and 9456) highlight the rightmost parts of each number. On the right, labeled “R2L Tokenization,” the same numbers are written with commas as 8,302,080 and 3,529,456, adding up to 11,831,536. Here, the blue digits (302 and 529) show groups read from right to left." 
+       width="450">
+</p>
+
+>***Caption:** Visual comparison between Left-to-Right (L2R) and Right-to-Left (R2L) tokenization.*
+>
+>***Source:** SINGH, 2024 [13]*
+
+A problem that comes with the L2R tokenization, especially with models that break the numbers in chunks of 3 digits, is when the number of digits in the result is different from the number of digits of the operation numbers, what is called **length mismatch**, which can lead to math mistakes. In contrast, R2L tokenization aligns better with the place value of numbers (ones, hundreds, thousands, etc.), which improves an AI model\'s ability to perform arithmetic operations accurately.
+
+In the article "Tokenization counts: the impact of tokenization on arithmetic in frontier LLMs" [13], A. K. Singh and DJ Strouse conducted an experiment comparing the accuracy gap in arithmetic operations between R2L (enforced by commas) and L2R tokenization in the GPT 3.5 model, which uses BPE subword tokenization. The results showed that while accuracy in math tasks with the L2R direction was 75.6%, enforcing the R2L direction boosted it to 97.8% - over 20% higher than the standard results.
+
+That being said, we can observe that tokenization plays a critical role in the numerical reasoning capabilities in LLMs, and some consideration must be put in number tokenization schemes to avoid performance drops and errors in calculations.
+
+### Example 9 - Numbers: L2R vs R2L Tokenization Intuition
+
+> ***Caption.** This code demonstrates Left-to-Right (L2R) and Right-to-Left (R2L) tokenization, using commas to force the R2L tokenization. It splits numbers into small tokens from either direction and visualizes how the tokenization order affects the numerical representation, as shown in Figure 5.*
+
+
+``` python
+# Examples used, with commas to force the R2L tokenization
+l2r_text = "11831536"         # L2R — no commas
+r2l_text = "11,831,536"       # R2L — commas added to induce R2l
+
+# Tokenization
+l2r_tokens = tok_uni.tokenize(l2r_text)
+r2l_tokens = tok_uni.tokenize(r2l_text)
+
+print("L2R (no commas):")
+print(l2r_tokens)
+print("\nR2L (with commas):")
+print(r2l_tokens)
+```
+
+    L2R (no commas):
+    ['▁', '1183', '1536']
+
+    R2L (with commas):
+    ['▁11,', '831', ',', '536']
+##
+## 7.2. Complex Equations and Symbols 
+
+Complex equations are often seen in the field of computer science, and also in many other areas, so the model has to have a way to tokenize them. Since they are often seen, some tokenizers may have math symbols in their dictionary, but it is not always the case, as some models might not have some rare symbols in it. In some tokenizers, the bytes that compose the symbol can be in their dictionary, and then, the tokenizer will only understand their bytes, as we can see in Example 10.
+
+### Example 10 - Math Symbols: When the Vocabulary Contains Them
+
+> **Caption.** Some models tokenizing math equations. In the given examples, T5 recognize all the symbols. BERT, on the other hand, could not tokenize some symbols in the equations, because they are not in its vocabulary. GPT2 is not capable to recognize some symbols, but knows their byte combinations, such as:
+> -   ∫ = âĪ
+> -   π = ÏĢ
+> -   ϕ = Ïķ
+>
+>These differences in the models happen because of the training corpus of each model, where some rare symbols might not appear.
+
+``` python
+# Math equations used as examples
+CASES = [
+    "∫2π∫π∫rsin(ϕ)",
+    "e^(i*π) + 1 = 0",
+    "H(X) = -sum( P(xi) * log2(P(xi))"
+]
+
+# Output for each tokenizer
+for s in CASES:
+    print("Text Input:", s)
+    print("GPT2 Output:  ", tok_bpe.tokenize(s))
+    print("BERT Output:  ", tok_wp.tokenize(s))
+    print("T5 Output:   ", tok_uni.tokenize(s))
+
+    print("-" * 100)
+```
+
+    Text Input: ∫2π∫π∫rsin(ϕ)
+    GPT2 Output:   ['âĪ', '«', '2', 'ÏĢ', 'âĪ', '«', 'ÏĢ', 'âĪ', '«', 'rs', 'in', '(', 'Ï', 'ķ', ')']
+    BERT Output:   ['[UNK]', '(', '[UNK]', ')']
+    T5 Output:    ['▁', '∫', '2', 'π', '∫', 'π', '∫', 'r', 'sin', '(', 'φ', ')']
+    ----------------------------------------------------------------------------------------------------
+    Text Input: e^(i*π) + 1 = 0
+    GPT2 Output:   ['e', '^', '(', 'i', '*', 'ÏĢ', ')', 'Ġ+', 'Ġ1', 'Ġ=', 'Ġ0']
+    BERT Output:   ['e', '^', '(', 'i', '*', 'π', ')', '+', '1', '=', '0']
+    T5 Output:    ['▁', 'e', '^', '(', 'i', '*', 'π', ')', '▁+', '▁1', '▁', '=', '▁0']
+    ----------------------------------------------------------------------------------------------------
+    Text Input: H(X) = -sum( P(xi) * log2(P(xi))
+    GPT2 Output:   ['H', '(', 'X', ')', 'Ġ=', 'Ġ-', 'sum', '(', 'ĠP', '(', 'xi', ')', 'Ġ*', 'Ġlog', '2', '(', 'P', '(', 'xi', '))']
+    BERT Output:   ['h', '(', 'x', ')', '=', '-', 'sum', '(', 'p', '(', 'xi', ')', '*', 'log', '##2', '(', 'p', '(', 'xi', ')', ')']
+    T5 Output:    ['▁H', '(', 'X', ')', '▁', '=', '▁', '-', 'sum', '(', '▁P', '(', 'xi', ')', '▁*', '▁log', '2(', 'P', '(', 'xi', '))']
+    ----------------------------------------------------------------------------------------------------
+
+Another way to think about math tokenization is using **Latex** representations. In Example 11, we can see that the models that couldn't tokenize the equation, will be able to tokenize the same equation represented in Latex. This happens because the tokenizer probably has seen the symbols in Latex representation at some point during the training process, so they can be read and understood by the tokenizer. As Latex carries a lot of semantic structure, and is made of frequent and stable sequences, it is easier for the model to tokenize it.
+
+### Example 11 - LaTeX as a Tokenization Bridge
+
+> **Caption.** When symbols tokenize poorly, LaTeX often segments into familiar ASCII subwords that tokenizers handle well.
+
+``` python
+# Math equations used as examples
+CASES = [
+    "$$\int 2\pi \int r \sin(\phi)$$",
+    "$$e^{i\pi} + 1 = 0$$",
+    "$$H(X) = -\sum_{i=1}^{n}P(x_i)\log_2P(x_i)$$"
+]
+
+# Outputs for each tokenizer
+for s in CASES:
+    print("Text Input:", s)
+    print("GPT2 Output:  ", tok_bpe.tokenize(s))
+    print("BERT Output:  ", tok_wp.tokenize(s))
+    print("T5 Output:   ", tok_uni.tokenize(s))
+
+    print("-" * 100)
+```
+
+    Text Input: $$\int 2\pi \int r \sin(\phi)$$
+    GPT2 Output:   ['$$', '\\', 'int', 'Ġ2', '\\', 'pi', 'Ġ\\', 'int', 'Ġr', 'Ġ\\', 'sin', '(\\', 'phi', ')', '$$']
+    BERT Output:   ['$', '$', '\\', 'int', '2', '\\', 'pi', '\\', 'int', 'r', '\\', 'sin', '(', '\\', 'phi', ')', '$', '$']
+    T5 Output:    ['▁$$', '\\', 'int', '▁2', '\\', 'pi', '▁', '\\', 'int', '▁', 'r', '▁', '\\', 'sin', '(\\', 'phi', ')', '$$']
+    ----------------------------------------------------------------------------------------------------
+    Text Input: $$e^{i\pi} + 1 = 0$$
+    GPT2 Output:   ['$$', 'e', '^{', 'i', '\\', 'pi', '}', 'Ġ+', 'Ġ1', 'Ġ=', 'Ġ0', '$$']
+    BERT Output:   ['$', '$', 'e', '^', '{', 'i', '\\', 'pi', '}', '+', '1', '=', '0', '$', '$']
+    T5 Output:    ['▁$$', 'e', '^{', 'i', '\\', 'pi', '}', '▁+', '▁1', '▁', '=', '▁0', '$$']
+    ----------------------------------------------------------------------------------------------------
+    Text Input: $$H(X) = -\sum_{i=1}^{n}P(x_i)\log_2P(x_i)$$
+    GPT2 Output:   ['$$', 'H', '(', 'X', ')', 'Ġ=', 'Ġ-', '\\', 'sum', '_{', 'i', '=', '1', '}', '^{', 'n', '}', 'P', '(', 'x', '_', 'i', ')\\', 'log', '_', '2', 'P', '(', 'x', '_', 'i', ')', '$$']
+    BERT Output:   ['$', '$', 'h', '(', 'x', ')', '=', '-', '\\', 'sum', '_', '{', 'i', '=', '1', '}', '^', '{', 'n', '}', 'p', '(', 'x', '_', 'i', ')', '\\', 'log', '_', '2', '##p', '(', 'x', '_', 'i', ')', '$', '$']
+    T5 Output:    ['▁$$', 'H', '(', 'X', ')', '▁', '=', '▁', '-', '\\', 'sum', '_{', 'i', '=1', '}^{', 'n', '}', 'P', '(', 'x', '_', 'i', ')\\', 'log', '_2', 'P', '(', 'x', '_', 'i', ')', '$$']
+    ----------------------------------------------------------------------------------------------------
+
+Another possible approach is to treat each mathematical symbol as a separated token. This strategy prevents operators and special symbols from being split into multiple tokens or bytes, which reduces segmentation noise and improves consistency when parsing symbolic expressions. However, symbol-level tokenization requires the tokenizer's vocabulary to explicitly include these characters---otherwise, rare or composite symbols such as "≤", "≠", or "≈" may still be fragmented or normalized into longer text sequences. In practice, many modern tokenizers adopt a hybrid scheme, combining symbol-level tokens for operators with subword tokenization for numbers and text [33].
+
+#
+# 8. Tokenization of Programming Languages
+
+Tokenization of programming languages follows a logic different from natural language text. Here, the tokens are defined by strict syntactic and grammatical rules established by the language specification. The goal is not to preserve semantic meaning in the human sense, but to enable parsers and compilers to understand the code structure unambiguously.
+
+##
+## 8.1. How Code is Tokenized
+
+In programming languages, tokenization is usually referred to as lexical analysis, which is the first phase of a compiler. The lexical analyzer (or **lexer**) reads the raw sequence of characters from the source code, groups them into lexemes, and produces a sequence of tokens.Let\'s see some definitions for better understanding [34, 35].
+
+-   **token:** the abstract category, such as *IF*, *IDENTIFIER*, or *NUMBER*. A token may carry an attribute (e.g., the numeric value of a constant).
+-   **pattern:** the rule that defines which character sequences belong to a token (e.g., the token *IDENTIFIER* has the pattern "letter followed by zero or more letters or digits", the token *IF* has the pattern `"if"` --- the literal characters *i* followed by *f*).
+-   **lexeme:** the actual sequence of characters in the source code that matches a pattern and is recognized as an instance of a token (e.g., in `x = 42`, the lexemes are *x* as an *IDENTIFIER* and *42* as a *NUMBER*).
+
+Some common categories of tokens include: **keywords** (e.g., *if*, *while*, *return*); **identifiers** (e.g., variable and function names); **operators** (e.g., `+`, `=`, `==`); **literals** (e.g., numbers, strings, booleans); **delimiters** (e.g., `(`, `)`, `{`, `}`, `;`); **whitespace/Indentation** (language-dependent treatment).
+
+In short, while tokenization of human language balances efficiency and
+meaning, tokenization of programming languages ​​is a rule-based process defined by the language\'s grammar, producing an unambiguous stream of tokens for the parser to consume. To illustrate this distinction, Example 12 compares the lexical tokens generated by Python's tokenizer with the subword units produced by GPT-2's BPE model.
+
+
+### Example 12 - Programming Languages: Lexical Tokens vs NLP Subwords 
+
+> **Caption.** Example of GPT-2's subword tokenization applied to Python code. Since GPT-2 was trained on natural language rather than programming syntax, it treats the code purely as text, splitting it into arbitrary subword fragments (e.g., \"Ġi\", \"Ġrange\") instead of syntactically meaningful units like keywords, identifiers, or operators.
+
+
+``` python
+# Code snippet used as example
+code_snippet = dedent('''\
+for i in range(3):
+    # Display outputs to inspect token strings, token IDs, and decoder round-trips.
+    print(i)
+''')
+
+tokens = tok_bpe.tokenize(code_snippet)
+print("Code snippet tokens:", tokens)
+```
+
+    Code snippet tokens: ['for', 'Ġi', 'Ġin', 'Ġrange', '(', '3', '):', 'Ċ', 'Ġ', 'Ġ', 'Ġ', 'Ġ#', 'ĠDisplay', 'Ġoutputs', 'Ġto', 'Ġinspect', 'Ġtoken', 'Ġstrings', ',', 'Ġtoken', 'ĠIDs', ',', 'Ġand', 'Ġdec', 'oder', 'Ġround', '-', 'tri', 'ps', '.', 'Ċ', 'Ġ', 'Ġ', 'Ġ', 'Ġprint', '(', 'i', ')', 'Ċ']
+
+>**Caption.** Utility function that uses Python's tokenize module to convert a code snippet into tokens---printing each token's type, text, and start/end positions---plus a compact one-line summary of the stream.
+
+``` python
+# Utility for pretty-printing tokens/ids; makes teaching outputs readable.
+def show_tokens(code: str):
+    # Tokenize `code` and print (index, type_name, string, start_pos, end_pos).
+    # Also prints a compact one-line summary of the token stream.
+    print("Source code:\n" + "-"*40)
+    print(code)
+    print("-"*40 + "\n")
+
+    # Prepare bytes for tokenize.tokenize
+    b = io.BytesIO(code.encode("utf-8"))
+    tokgen = tokenize.tokenize(b.readline)
+
+    items = []
+    compact = []
+    idx = 0
+    for tok in tokgen:
+        # The ENCODING and NL tokens are part of the stream, but can skip ENCODING
+        if tok.type == tokenize.ENCODING:
+            continue
+
+        # Build human-readable token type name
+        type_name = token.tok_name.get(tok.type, str(tok.type))
+        items.append((idx, type_name, tok.string, tok.start, tok.end))
+        compact.append(f"[{type_name}:{tok.string}]")
+        idx += 1
+
+    # Display outputs to inspect token strings, token IDs, and decoder round-trips.
+    print("Detailed token stream:\n(index) TYPE\tSTRING\t\t(start)->(end)")
+    for i, tname, s, start, end in items:
+        st = f"{start[0]}:{start[1]}"
+        en = f"{end[0]}:{end[1]}"
+        display_s = s.replace("\n", "\\n")
+
+        print(f"({i:>3}) {tname:<10}\t{display_s:<16}\t({st})->({en})")
+
+    print("\nCompact summary:")
+    print(" ".join(compact))
+
+code_snippet = dedent('''\
+for i in range(3):
+    # Display outputs to inspect token strings, token IDs
+    print(i)
+''')
+
+show_tokens(code_snippet)
+```
+
+    Source code:
+    ----------------------------------------
+    for i in range(3):
+        # Display outputs to inspect token strings, token IDs, and decoder round-trips.
+        print(i)
+
+    ----------------------------------------
+
+    Detailed token stream:
+    (index) TYPE	STRING		(start)->(end)
+    (  0) NAME      	for             	(1:0)->(1:3)
+    (  1) NAME      	i               	(1:4)->(1:5)
+    (  2) NAME      	in              	(1:6)->(1:8)
+    (  3) NAME      	range           	(1:9)->(1:14)
+    (  4) OP        	(               	(1:14)->(1:15)
+    (  5) NUMBER    	3               	(1:15)->(1:16)
+    (  6) OP        	)               	(1:16)->(1:17)
+    (  7) OP        	:               	(1:17)->(1:18)
+    (  8) NEWLINE   	\n              	(1:18)->(1:19)
+    (  9) COMMENT   	# Display outputs to inspect token strings, token IDs, and decoder round-trips.	(2:4)->(2:83)
+    ( 10) NL        	\n              	(2:83)->(2:84)
+    ( 11) INDENT    	                	(3:0)->(3:4)
+    ( 12) NAME      	print           	(3:4)->(3:9)
+    ( 13) OP        	(               	(3:9)->(3:10)
+    ( 14) NAME      	i               	(3:10)->(3:11)
+    ( 15) OP        	)               	(3:11)->(3:12)
+    ( 16) NEWLINE   	\n              	(3:12)->(3:13)
+    ( 17) DEDENT    	                	(4:0)->(4:0)
+    ( 18) ENDMARKER 	                	(4:0)->(4:0)
+
+    Compact summary:
+    [NAME:for] [NAME:i] [NAME:in] [NAME:range] [OP:(] [NUMBER:3] [OP:)] [OP::] [NEWLINE:
+    ] [COMMENT:# Display outputs to inspect token strings, token IDs, and decoder round-trips.] [NL:
+    ] [INDENT:    ] [NAME:print] [OP:(] [NAME:i] [OP:)] [NEWLINE:
+    ] [DEDENT:] [ENDMARKER:]
+##
+## 8.2. Indentation and Formatting Across Languages 
+
+Indentation is an important differentiator across programming languages. In python, for example, indentation is syntactically significant. Whitespace at the beginning of a line is converted into special tokens (**INDENT** and **DEDENT**) that define block structure. Without correct indentation tokens, the program cannot be parsed [36]. On the other hand, in languages like C or Java, indentation is not syntactically relevant. Blocks are defined explicitly by delimiters (`{}`), and whitespace serves only as a separator. This way, the tokenizer will just discard indentation as any other whitespace [35]. It\'s also interesting to note that the lexical analyzer discards comments between the tokens.
+#
+# 9. The Impact of Tokenization and the Journey Towards Vectorization 
+
+Tokenization, as we have seen, is an important bridge between human language and the "LLM language", since the choice of the tokenization process can impact the efficiency, coverage, consistency and meaning conservation capability of the model. We can see that subword level tokenization, most of the time, is the most robust solution, capable of balancing extensive vocabulary representation with computational efficiency.
+
+Once the text is tokenized, the next challenge is to translate the tokens into a language that the models can truly understand: **Numbers**. That's where the **token vectorization** comes in, so that we can convert each token into a high-dimensional numerical list of numbers, a vector. This process could yield an entire article on its own, but in short, the result of this part is a whole geometric space where the directions represent the semantic clusters of the tokens, and which the LLM manipulates in order to produce and shape texts.
+
+Understanding the role of tokenization in the forming process of this semantic space, far from being only a technical detail, is the very foundation of how meaning emerges in large language models.
+#
+# 10. References
+
+[1] WORD, subword, and character-based tokenization: know the difference, Towards Data Science. Available at: https://towardsdatascience.com/word-subword-and-character-based-tokenization-know-the-difference-ea0976b64e17/. Accessed: Sep. 10, 2025.
+
+[2] Summary of the Tokenizers, Hugging Face Documentation. Available at: https://huggingface.co/docs/transformers/tokenizer_summary. Accessed: Sep. 10, 2025.
+
+[3] Rule-Based Tokenization in NLP, GeeksforGeeks, Oct. 2025. Available at: https://www.geeksforgeeks.org/nlp/rule-based-tokenization-in-nlp/?utm_source=chatgpt.com. Accessed: Oct. 10, 2025.
+
+[4] D. Jurafsky and J. H. Martin, Speech and Language Processing (3rd ed. draft), Stanford University. Available at: https://web.stanford.edu/~jurafsky/slp3/. Accessed: Oct. 5, 2025.
+
+[5] J. Yang, "Rethinking Tokenization: Crafting Better Tokenizers for Large Language Models," arXiv preprint arXiv:2403.00417, 2024. Available at: https://arxiv.org/pdf/2403.00417. Accessed: Oct. 1, 2025.
+
+[6] spaCy, Tokenization. In: Linguistic Features. Available at: https://spacy.io/usage/linguistic-features#tokenization. Accessed: Sep. 23, 2025.
+
+[7] How many words are in the English language?, English Live. Available at: https://englishlive.ef.com/en/blog/language-lab/many-words-english-language/. Accessed: Sep. 10, 2025.
+
+[8] X. Zhang and Y. LeCun, "Text Understanding from Scratch," arXiv preprint arXiv:1502.01710v5 [cs.LG], 2015. Available at: https://arxiv.org/abs/1502.01710v5. Accessed: Sep. 22, 2025.
+
+[9] The Unicode Standard, Version 17.0 - Chapter 2: "Code Points and Characters". Unicode Consortium, 2024. [Online]. Available at: https://www.unicode.org/versions/latest/core-spec/chapter-2/. Accessed: Oct. 10, 2025.
+
+[10] Z. Alyafeai et al., "Between words and characters: A brief history of open-vocabulary modeling and tokenization in NLP," arXiv preprint arXiv:2112.10508, 2021. [Online]. Available at: https://arxiv.org/abs/2112.10508. Accessed: Sep. 16, 2025.
+
+[11] C. Si et al., "Sub-character tokenization for Chinese pretrained language models," Transactions of the Association for Computational Linguistics, vol. 11, pp. 572--588, 2023.
+
+[12] N. Freed and B. Thompson, "UTF-8, a transformation format of ISO 10646," Internet Engineering Task Force (IETF) RFC 3629, 2003. Available at: https://datatracker.ietf.org/doc/html/rfc3629. Accessed: Oct. 10, 2025.
+
+[13] A. K. Singh and D. J. Strouse, "Tokenization counts: the impact of tokenization on arithmetic in frontier LLMs," arXiv preprint arXiv:2402.14903v1, 2024. Available at: https://arxiv.org/abs/2402.14903. Accessed: Sep. 10, 2025.
+
+[14] P. Gage, "A new algorithm for data compression," The C Users Journal, vol. 12, no. 2, pp. 23--38, Feb. 1994.
+
+[15] L. Kozma and J. Voderholzer, "Theoretical Analysis of Byte-Pair Encoding," arXiv preprint arXiv:2411.08671v1 [cs.DS], 2024. Available at: https://arxiv.org/abs/2411.08671v1. Accessed: Sep. 22, 2025.
+
+[16] M. Schuster and K. Nakajima, "Japanese and Korean voice search," in Proc. IEEE Int. Conf. Acoustics, Speech and Signal Processing (ICASSP), Kyoto, 2012, pp. 5149--5152.
+
+[17] Hugging Face, "WordPiece tokenization," Hugging Face Course - Chapter 6, 2024--. [Online]. Available at: https://huggingface.co/docs/course/en/chapter6/6. Accessed: Oct. 11, 2025.
+
+[18] Penn State Department of Statistics, "1.2 -- Maximum Likelihood Estimation," STAT 415: Introduction to Mathematical Statistics. [Online]. Available at: https://online.stat.psu.edu/stat415/lesson/1/1.2. Accessed: Oct. 10, 2025.
+
+[19] Unigram tokenization, Hugging Face LLM Course. Available at: https://huggingface.co/learn/llm-course/chapter6/7. Accessed: Sep. 17, 2025.
+
+[20] T. Kudo, "Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates," in Proc. 56th Annual Meeting of the Association for Computational Linguistics (ACL), Melbourne, 2018, pp. 1792--1803.
+
+[21] J. Ács, "Exploring BERT's vocabulary," 2019. Available at: https://juditacs.github.io/2019/02/19/bert-tokenization-stats.html. Accessed: Sep. 30, 2025.
+
+[22] X. Wang, S. Ruder, and G. Neubig, "Multi-view Subword Regularization," arXiv preprint arXiv:2103.08490, 2021. Available at: https://arxiv.org/abs/2103.08490. Accessed: Sep. 30, 2025.
+
+[23] C. W. Schmidt, V. Reddy, H. Zhang, A. Alameddine, O. Uzan, Y. Pinter, and C. Tanner, "Tokenization Is More Than Compression," arXiv preprint arXiv:2402.18376, 2024. Available at: https://arxiv.org/abs/2402.18376. Accessed: Oct. 10, 2025.
+
+[24] J. Lundin, A. Zhang, N. Karim, H. Louzan, V. Wei, D. Adelâni, and C. Carroll, "The Token Tax: Systematic Bias in Multilingual Tokenization," arXiv preprint arXiv:2509.05486, Sep. 2025.
+
+[25] Jieba, jieba - Python Chinese text segmentation. Available at: https://pypi.org/project/jieba/. Accessed: Sep. 23, 2025.
+
+[26] Atilika, Kuromoji -- Japanese Morphological Analyzer. Available at: https://www.atilika.org/. Accessed: Sep. 23, 2025.
+
+[27] A. Abdelali, K. Darwish, N. Durrani, and H. Mubarak, "Farasa: A Fast and Furious Segmenter for Arabic," in Proc. NAACL 2016 Demonstrations, San Diego, CA, 2016, pp. 11--16. Available in: https://aclanthology.org/N16-3003/. Accessed: Sep. 23, 2025.
+
+[28] Z. Alyafeai, M. Al-Shaibani, M. Ghaleb, and I. Ahmad, "Evaluating Various Tokenizers for Arabic Text Classification," King Fahd University of Petroleum and Minerals, Dhahran, Saudi Arabia, Sep. 2021.
+
+[29] A. Kunchukuttan and P. Bhattacharyya, "Orthographic Syllable as basic unit for SMT between Related Languages," arXiv preprint arXiv:1610.00634, 2016. [Online]. Available: https://arxiv.org/abs/1610.00634. Accessed: Oct. 10, 2025.
+
+[30] T. Kudo and J. Richardson, "SentencePiece: A simple and language-independent subword tokenizer and detokenizer for neural text processing," arXiv preprint arXiv:1808.06226, 2018. Available at: https://arxiv.org/abs/1808.06226. Accessed: Sep. 23, 2025.
+
+[31] D. Ataman, M. Negri, M. Turchi, and M. Federico, "Linguistically Motivated Vocabulary Reduction for Neural Machine Translation from Turkish to English," The Prague Bulletin of Mathematical Linguistics, no. 108, pp. 331--342, 2017.
+
+[32] P. Rust, J. Pfeiffer, I. Vulić, S. Ruder, and I. Gurevych, "How Good is Your Tokenizer? On the Monolingual Performance of Multilingual Language Models," in Proc. ACL/IJCNLP 2021 (Vol. 1: Long Papers), pp. 3118--3135. doi:10.18653/v1/2021.acl-long.243.
+
+[33] G. Lample and F. Charton, "Deep Learning for Symbolic Mathematics," arXiv preprint arXiv:1912.01412, 2019. Available at: https://arxiv.org/abs/1912.01412. Accessed: 8 Oct. 2025.
+
+[34] A. V. Aho, M. S. Lam, R. Sethi, and J. D. Ullman, Compilers: Principles, Techniques, and Tools, 2nd ed., Addison Wesley, 2006.
+
+[35] A. W. Appel, Modern Compiler Implementation in C, Cambridge University Press, 2002.
+
+[36] Python Software Foundation, The Python Language Reference: Lexical Analysis. Available at: https://docs.python.org/3/reference/lexical_analysis.html. Accessed: Sep. 23, 2025.
