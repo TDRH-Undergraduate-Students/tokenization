@@ -1010,7 +1010,7 @@ show_tokens(code_snippet)
 
 Indentation is an important differentiator across programming languages. In python, for example, indentation is syntactically significant. Whitespace at the beginning of a line is converted into special tokens (**INDENT** and **DEDENT**) that define block structure. Without correct indentation tokens, the program cannot be parsed [36]. On the other hand, in languages like C or Java, indentation is not syntactically relevant. Blocks are defined explicitly by delimiters (`{}`), and whitespace serves only as a separator. This way, the tokenizer will just discard indentation as any other whitespace [35]. It\'s also interesting to note that the lexical analyzer discards comments between the tokens.
 #
-# 9. The Impact of Tokenization and the Journey Towards Vectorization 
+# 9. A Brief Look at Tokenization and How It Leads to Vectorization
 
 Tokenization, as we have seen, is an important bridge between human language and the "LLM language", since the choice of the tokenization process can impact the efficiency, coverage, consistency and meaning conservation capability of the model. We can see that subword level tokenization, most of the time, is the most robust solution, capable of balancing extensive vocabulary representation with computational efficiency.
 
