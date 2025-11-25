@@ -20,3 +20,11 @@ For the complete study and detailed analysis, see [tokenization.md](https://gith
 7. Tokenization of **Mathematics**
 8. Tokenization of **Programming Languages**
 9. A Brief Look at Tokenization and How It Leads to Vectorization
+
+## ***Contact***
+If you have any questions or would like to get in touch, feel free to contact us:
+
+- **Thaís Martins** — thais_martins@usp.br  
+- **Thainara Assis** — thainaraassisgoulart@usp.br 
+- **Gustavo Bernardo** — gustavo.bernardo@usp.br  
+- **João Gabriel Matos** — gabrielmattos@usp.br
